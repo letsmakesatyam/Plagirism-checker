@@ -1,0 +1,43 @@
+
+services:
+  db:
+    image: postgres:16
+    container_name: plagiarism_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: plagiarism_user
+      POSTGRES_PASSWORD: plagiarism_pass
+      POSTGRES_DB: plagiarism_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plagiarism_user -d plagiarism_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: plagiarism_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://plagiarism_user:plagiarism_pass@db:5432/plagiarism_db
+      JWT_SECRET_KEY: change-this-in-production
+      ENV: production
+      DEBUG: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+      - faiss_data:/app/faiss_data
+
+volumes:
+  postgres_data:
+  uploads_data:
+  faiss_data:

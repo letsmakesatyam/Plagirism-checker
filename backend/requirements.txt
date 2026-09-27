@@ -1,0 +1,39 @@
+# --- Phase 1: Core API, DB, Auth ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+pydantic==2.10.4
+pydantic[email]==2.10.4
+pydantic-settings==2.7.0
+python-jose[cryptography]==3.3.0
+bcrypt==4.0.1  # used directly (not via passlib) — see docs/README.md > Troubleshooting
+python-multipart==0.0.20
+python-dotenv==1.0.1
+
+# --- Phase 2: File upload & text extraction ---
+PyMuPDF==1.25.1
+pdfplumber==0.11.4
+python-docx==1.1.2
+pytesseract==0.3.13
+pdf2image==1.17.0
+Pillow==11.0.0
+
+# --- Phase 3: Embeddings & vector search ---
+sentence-transformers==5.6.1
+faiss-cpu==1.15.0
+
+# --- Phase 4b: Internet-source ingestion (URL fetching) ---
+httpx==0.28.1
+
+# --- Phase 4c: AI-generated-text detection ---
+# torch is already installed as a transitive dependency of sentence-transformers
+# (Phase 3); transformers is listed explicitly here because ai_detection.py
+# imports it directly, independently of sentence-transformers.
+transformers==4.47.1
+
+# --- Phase 5: PDF report export ---
+# Pure-Python PDF generation, no system dependencies (unlike wkhtmltopdf/a
+# headless browser) — see app/services/report_pdf.py.
+reportlab==4.2.5
