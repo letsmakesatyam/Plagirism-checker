@@ -130,6 +130,33 @@ def warm_up_native_libraries():
     vector_index.get_index()
     vector_index_sources.get_index()
     logger.info("native_libraries_warmed_up")
+    cleanup_interrupted_submissions()
+
+
+def cleanup_interrupted_submissions(db=None):
+    """Marks any submissions interrupted during extraction or embedding as FAILED on startup."""
+    from app.database import SessionLocal
+    from app.models.submission import Submission, SubmissionStatus
+
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
+    try:
+        interrupted = (
+            db.query(Submission)
+            .filter(Submission.status.in_([SubmissionStatus.EXTRACTING, SubmissionStatus.EMBEDDING]))
+            .all()
+        )
+        for sub in interrupted:
+            sub.status = SubmissionStatus.FAILED
+            sub.error_message = "Server restarted while processing. Please retry."
+        if interrupted:
+            db.commit()
+            logger.info("cleaned_up_interrupted_submissions", extra={"count": len(interrupted)})
+    finally:
+        if close_db:
+            db.close()
 
 
 @app.get("/api/health", tags=["system"])

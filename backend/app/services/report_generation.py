@@ -67,7 +67,11 @@ def generate_full_report(submission: Submission, db: Session) -> Report:
         run_ai_check(submission, report, db)
     except Exception as exc:  # noqa: BLE001
         logger.warning("ai_check_failed", extra=log_extra, exc_info=exc)
-        errors.append(f"AI-text check failed: {exc}")
+        report.ai_status = "unavailable"
+        report.ai_signal_strength = "unavailable"
+        report.ai_score = None
+        # Note: AI check failure is recorded as unavailable, but does not block
+        # the report from completing or invalidate plagiarism findings.
 
     # overall_originality_score: 100 minus whichever plagiarism signal is
     # strongest. Using max() rather than averaging is deliberate — a

@@ -5,8 +5,14 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem("current_user");
-    return raw ? JSON.parse(raw) : null;
+    try {
+      const raw = localStorage.getItem("current_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      localStorage.removeItem("current_user");
+      localStorage.removeItem("access_token");
+      return null;
+    }
   });
   const [loading, setLoading] = useState(true);
 
@@ -50,7 +56,17 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isFaculty: user?.role === "faculty", isStudent: user?.role === "student" }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        isFaculty: user?.role === "faculty",
+        isStudent: user?.role === "student",
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

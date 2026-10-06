@@ -73,6 +73,13 @@ class ReportOut(BaseModel):
     likely_ai_count: Optional[int] = None
     likely_human_count: Optional[int] = None
     uncertain_count: Optional[int] = None
+    ai_status: Optional[str] = None
+    ai_model_name: Optional[str] = None
+    ai_method_version: Optional[str] = None
+    ai_word_coverage_pct: Optional[float] = None
+    ai_evaluated_words: Optional[int] = None
+    ai_skipped_words: Optional[int] = None
+    ai_signal_strength: Optional[str] = None
     generated_at: Optional[datetime] = None
 
     class Config:

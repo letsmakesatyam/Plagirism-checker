@@ -33,6 +33,23 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _ai_signal_display(report: Report) -> str:
+    status = getattr(report, "ai_status", None)
+    if status == "insufficient_text":
+        return "Insufficient text"
+    if status == "unreliable_ocr":
+        return "Unreliable text"
+    if status == "unavailable":
+        return "Unavailable"
+    if status == "legacy":
+        return f"{report.ai_score:.1f}% (Legacy)" if report.ai_score is not None else "Legacy"
+    strength = getattr(report, "ai_signal_strength", None)
+    if strength:
+        cov = f" ({report.ai_word_coverage_pct:.0f}% coverage)" if report.ai_word_coverage_pct else ""
+        return f"{strength.capitalize()}{cov}"
+    return f"{report.ai_score:.1f}%" if report.ai_score is not None else "N/A"
+
+
 def generate_report_pdf(report: Report, submission: Submission) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm)
@@ -55,11 +72,11 @@ def generate_report_pdf(report: Report, submission: Submission) -> bytes:
     ]
 
     score_rows = [
-        ["Metric", "Score"],
+        ["Metric", "Score / Status"],
         ["Overall Originality", _fmt_score(report.overall_originality_score)],
         ["Internal Similarity", _fmt_score(report.internal_score)],
         ["Internet Similarity", _fmt_score(report.internet_score)],
-        ["AI-Generated (likely)", _fmt_score(report.ai_score)],
+        ["AI Writing Signal", _ai_signal_display(report)],
     ]
     table = Table(score_rows, colWidths=[8 * cm, 4 * cm])
     table.setStyle(
@@ -78,9 +95,9 @@ def generate_report_pdf(report: Report, submission: Submission) -> bytes:
     story.append(Spacer(1, 0.7 * cm))
     story.append(
         Paragraph(
-            "AI-detection note: the AI-Generated score comes from an open-source classifier "
-            "trained on older AI-generated text and should not be treated as certain proof — "
-            "see docs/README.md section 12 for its documented limitations.",
+            "AI writing signal note: this classifier metric is an experimental statistical indicator, "
+            "not calibrated proof of machine authorship. It never establishes definitive authorship. "
+            "Evaluated prose coverage and language context must always be reviewed manually by faculty.",
             small,
         )
     )

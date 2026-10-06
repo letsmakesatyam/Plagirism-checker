@@ -13,7 +13,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, Text
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -55,6 +55,15 @@ class Report(Base):
     likely_ai_count = Column(Integer, nullable=True)
     likely_human_count = Column(Integer, nullable=True)
     uncertain_count = Column(Integer, nullable=True)
+
+    # Auditable AI metadata and signal presentation
+    ai_status = Column(String(50), nullable=True)  # completed, insufficient_text, unreliable_ocr, unavailable, legacy
+    ai_model_name = Column(String(150), nullable=True)
+    ai_method_version = Column(String(50), nullable=True)
+    ai_word_coverage_pct = Column(Float, nullable=True)
+    ai_evaluated_words = Column(Integer, nullable=True)
+    ai_skipped_words = Column(Integer, nullable=True)
+    ai_signal_strength = Column(String(50), nullable=True)  # low, moderate, elevated, uncertain, unavailable
 
     generated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

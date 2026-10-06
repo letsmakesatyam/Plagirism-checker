@@ -18,7 +18,10 @@ client.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem("access_token");
       localStorage.removeItem("current_user");
-      if (!window.location.pathname.startsWith("/login")) {
+      const isAuthEndpoint =
+        error.config?.url?.includes("/auth/login") ||
+        error.config?.url?.includes("/auth/register");
+      if (!isAuthEndpoint && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
       }
     }

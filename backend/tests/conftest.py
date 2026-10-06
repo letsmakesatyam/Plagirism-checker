@@ -37,13 +37,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    os.environ.get(
-        "TEST_DATABASE_URL",
-        "postgresql+psycopg2://plagiarism_user:plagiarism_pass@localhost:5432/plagiarism_test",
-    ),
-)
+import re
+_raw_db_url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL") or "postgresql+psycopg2://plagiarism_user:plagiarism_pass@localhost:5432/plagiarism_test"
+TEST_DATABASE_URL = re.sub(r'/[^/?]+(\?.*)?$', r'/plagiarism_test\1', _raw_db_url)
+assert "plagiarism_test" in TEST_DATABASE_URL, f"Safety check: tests must target plagiarism_test, got {TEST_DATABASE_URL}"
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("ENV", "test")
 # Uploaded test files and the (mocked-save, but still path-checked) FAISS

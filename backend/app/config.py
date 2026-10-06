@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     AI_DETECTION_MODEL_NAME: str = "openai-community/roberta-base-openai-detector"
     AI_LIKELY_THRESHOLD: float = 0.65
     AI_HUMAN_THRESHOLD: float = 0.35
+    # Conservative prose eligibility rules for AI writing signal
+    AI_MIN_PROSE_WORDS: int = 100  # Conservative prose length requirement per evaluated segment
+    AI_WINDOW_MAX_TOKENS: int = 400
+    AI_WINDOW_STRIDE_TOKENS: int = 200
+    AI_SIGNAL_ELEVATED_THRESHOLD: float = 0.70
+    AI_SIGNAL_LOW_THRESHOLD: float = 0.30
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]

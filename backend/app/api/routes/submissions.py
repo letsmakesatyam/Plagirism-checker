@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -22,10 +22,11 @@ from app.core.dependencies import get_current_user, require_role
 from app.database import get_db
 from app.models.assignment import Assignment
 from app.models.paragraph_embedding import ParagraphEmbedding
+from app.models.report import Report
 from app.models.submission import Submission, SubmissionStatus
 from app.models.user import User, UserRole
 from app.schemas.submission import SubmissionDetail, SubmissionOut
-from app.services import file_storage
+from app.services import document_viewer, file_storage
 from app.services.embedding_pipeline import generate_embeddings_for_submission
 from app.services.extraction import extract_text
 from app.services.vector_index import search as faiss_search
@@ -230,6 +231,117 @@ def download_submission_file(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     return FileResponse(path=file_path, media_type=media_type, filename=submission.original_filename)
+
+
+@router.get("/api/submissions/{submission_id}/document-view")
+def get_submission_document_view(
+    submission_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns page metadata and highlight bounding box coordinates for this submission.
+    Available to the owner student or owning faculty. Works before or after report generation.
+    """
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not submission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+
+    is_owner_student = current_user.role == UserRole.STUDENT and submission.student_id == current_user.id
+    is_owner_faculty = (
+        current_user.role == UserRole.FACULTY and submission.assignment.faculty_id == current_user.id
+    )
+    if not (is_owner_student or is_owner_faculty):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this submission")
+
+    file_path = Path(submission.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file is missing on disk")
+
+    report = db.query(Report).filter(Report.submission_id == submission_id).first()
+    try:
+        return document_viewer.get_submission_document_pages(submission, report, db)
+    except Exception as exc:
+        logger.error(f"Error computing document view: {exc}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate document view: {exc}")
+
+
+@router.get("/api/submissions/{submission_id}/pages/{page}/image")
+def get_submission_page_image(
+    submission_id: uuid.UUID,
+    page: int,
+    annotated: bool = False,
+    dpi: int = 150,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Renders high-resolution image of a page from the authentic document.
+    Default annotated=False returns the clean original page image for interactive overlays.
+    """
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not submission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+
+    is_owner_student = current_user.role == UserRole.STUDENT and submission.student_id == current_user.id
+    is_owner_faculty = (
+        current_user.role == UserRole.FACULTY and submission.assignment.faculty_id == current_user.id
+    )
+    if not (is_owner_student or is_owner_faculty):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this submission")
+
+    file_path = Path(submission.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file is missing on disk")
+
+    report = db.query(Report).filter(Report.submission_id == submission_id).first()
+    try:
+        img_bytes = document_viewer.render_page_image_bytes(submission, report, db, page_number=page, annotated=annotated, dpi=dpi)
+        return Response(content=img_bytes, media_type="image/png")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"Error rendering page image: {exc}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to render page image")
+
+
+@router.get("/api/submissions/{submission_id}/annotated-file")
+def download_annotated_file(
+    submission_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generates and downloads an annotated PDF copy of the document with highlights embedded.
+    """
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not submission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+
+    is_owner_student = current_user.role == UserRole.STUDENT and submission.student_id == current_user.id
+    is_owner_faculty = (
+        current_user.role == UserRole.FACULTY and submission.assignment.faculty_id == current_user.id
+    )
+    if not (is_owner_student or is_owner_faculty):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this submission")
+
+    file_path = Path(submission.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file is missing on disk")
+
+    report = db.query(Report).filter(Report.submission_id == submission_id).first()
+    try:
+        pdf_bytes = document_viewer.generate_annotated_document_pdf(submission, report, db)
+        stem = Path(submission.original_filename).stem
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="annotated-{stem}.pdf"'},
+        )
+    except Exception as exc:
+        logger.error(f"Error generating annotated file: {exc}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate annotated PDF")
+
 
 
 @router.get("/api/submissions/{submission_id}/similar-paragraphs")

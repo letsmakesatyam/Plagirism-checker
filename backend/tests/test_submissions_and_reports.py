@@ -10,7 +10,13 @@ DUPLICATE_PARAGRAPHS = [
 
 AI_MARKER_PARAGRAPHS = [
     "::AI_MARKER:: As an AI language model, I have generated this text to illustrate a plausible essay "
-    "structure covering the assigned topic in a way that reads as coherent, structured, generic prose.",
+    "structure covering the assigned topic in a way that reads as coherent, structured, generic prose. "
+    "Machine learning algorithms analyze vast corpora of natural language text to predict subsequent tokens "
+    "and synthesize cohesive explanations across various domain areas. Consequently, generative systems "
+    "produce structured paragraphs with characteristic sentence lengths and formal transitional phrases "
+    "that mimic human scholarly discourse while synthesizing information across distributed training datasets. "
+    "This extended prose section ensures that the paragraph fulfills the minimum one hundred word eligibility "
+    "threshold required for reliable statistical authorship signal evaluation in academic integrity workflows.",
 ]
 
 

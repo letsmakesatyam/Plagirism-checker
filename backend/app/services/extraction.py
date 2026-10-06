@@ -174,23 +174,22 @@ def _ocr_pdf_page(pdf_doc: "fitz.Document", page_index: int) -> str:
 def extract_from_pdf(file_path: str) -> ExtractionResult:
     try:
         pages_text: list[str] = []
-        with pdfplumber.open(file_path) as pdf:
-            page_count = len(pdf.pages)
-            for page in pdf.pages:
-                extracted = page.extract_text() or ""
-                pages_text.append(extracted)
-
-        total_chars = sum(len(p) for p in pages_text)
-        avg_chars_per_page = total_chars / max(page_count, 1)
-        needs_ocr = avg_chars_per_page < MIN_CHARS_PER_PAGE_BEFORE_OCR
-
         was_ocr_used = False
-        if needs_ocr:
-            was_ocr_used = True
-            pdf_doc = fitz.open(file_path)
-            pages_text = [_ocr_pdf_page(pdf_doc, i) for i in range(page_count)]
-            pdf_doc.close()
+        pdf_doc = fitz.open(file_path)
+        page_count = len(pdf_doc)
 
+        for i in range(page_count):
+            p = pdf_doc[i]
+            direct_text = p.get_text() or ""
+            # Page-by-page OCR decision for mixed digital and scanned PDFs
+            if len(direct_text.strip()) < MIN_CHARS_PER_PAGE_BEFORE_OCR:
+                was_ocr_used = True
+                ocr_text = _ocr_pdf_page(pdf_doc, i)
+                pages_text.append(ocr_text)
+            else:
+                pages_text.append(direct_text)
+
+        pdf_doc.close()
         pages_text = remove_repeated_lines(pages_text)
         combined = clean_text("\n\n".join(pages_text))
         paragraphs = split_into_paragraphs(combined)
@@ -224,7 +223,18 @@ def extract_from_pdf(file_path: str) -> ExtractionResult:
 def extract_from_docx(file_path: str) -> ExtractionResult:
     try:
         doc = Document(file_path)
-        paragraphs_raw = [p.text for p in doc.paragraphs if p.text.strip()]
+        paragraphs_raw = []
+        for p in doc.paragraphs:
+            if p.text.strip():
+                paragraphs_raw.append(p.text.strip())
+
+        # Extract text from tables as well as paragraphs
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                if cells:
+                    paragraphs_raw.append(" | ".join(cells))
+
         combined = clean_text("\n\n".join(paragraphs_raw))
         paragraphs = split_into_paragraphs(combined)
         words = combined.split()

@@ -54,6 +54,7 @@ class Submission(Base):
     was_ocr_used = Column(Boolean, nullable=True)  # set after extraction; see services/extraction.py
     extracted_text = Column(Text, nullable=True)
     paragraphs = Column(JSONB, nullable=True)  # list[str], populated after extraction; embeddings use this in Phase 3
+    layout_metadata = Column(JSONB, nullable=True)  # page spans, word bboxes, and para-to-source mapping
     page_count = Column(Integer, nullable=True)
     word_count = Column(Integer, nullable=True)
 

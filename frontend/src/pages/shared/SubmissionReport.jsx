@@ -10,6 +10,7 @@ import ErrorBanner from "../../components/ErrorBanner";
 import StatusBadge from "../../components/StatusBadge";
 import ScoreSeal from "../../components/ScoreSeal";
 import EmptyState from "../../components/EmptyState";
+import DocumentViewer from "../../components/DocumentViewer";
 
 export default function SubmissionReport() {
   const { id } = useParams();
@@ -35,7 +36,10 @@ export default function SubmissionReport() {
 
   const generateMutation = useMutation({
     mutationFn: () => reportsApi.generateReport(id),
-    onSuccess: (data) => queryClient.setQueryData(["report", id], data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["report", id], data);
+      queryClient.invalidateQueries(["document-view", id]);
+    },
   });
 
   const downloadPdf = async () => {
@@ -44,7 +48,9 @@ export default function SubmissionReport() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `plagiarism-report-${submission.original_filename.split(".")[0]}.pdf`;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     window.URL.revokeObjectURL(url);
   };
 
@@ -53,6 +59,43 @@ export default function SubmissionReport() {
 
   if (subLoading) return <Spinner label="Loading submission" />;
   if (subError) return <ErrorBanner message={apiErrorMessage(subError, "Could not load this submission.")} />;
+
+  // Determine AI display values
+  const aiStatus = report?.ai_status;
+  let aiDisplaySeal = {
+    label: "AI writing signal",
+    textValue: "—",
+    status: aiStatus,
+  };
+
+  if (aiStatus === "insufficient_text") {
+    aiDisplaySeal = { label: "AI writing signal", textValue: "Too short", status: "insufficient_text" };
+  } else if (aiStatus === "unreliable_ocr") {
+    aiDisplaySeal = { label: "AI writing signal", textValue: "Poor OCR", status: "unreliable_ocr" };
+  } else if (aiStatus === "unavailable") {
+    aiDisplaySeal = { label: "AI writing signal", textValue: "N/A", status: "unavailable" };
+  } else if (aiStatus === "legacy") {
+    aiDisplaySeal = {
+      label: "AI writing signal",
+      value: report.ai_score,
+      textValue: report.ai_score !== null ? `${Math.round(report.ai_score)}%*` : "Legacy",
+      status: "legacy",
+    };
+  } else if (aiStatus === "completed" && report.ai_signal_strength) {
+    const strengthLabel =
+      report.ai_signal_strength === "elevated"
+        ? "Elevated"
+        : report.ai_signal_strength === "low"
+        ? "Low"
+        : "Moderate";
+    aiDisplaySeal = {
+      label: "AI writing signal",
+      textValue: strengthLabel,
+      value: report.ai_signal_strength === "elevated" ? 75 : report.ai_signal_strength === "low" ? 15 : 45,
+      status: report.ai_signal_strength,
+      invert: true,
+    };
+  }
 
   return (
     <div className="space-y-8">
@@ -85,7 +128,7 @@ export default function SubmissionReport() {
           )}
           {report && (
             <button className="btn-primary" onClick={downloadPdf}>
-              Download PDF
+              Download PDF Report
             </button>
           )}
         </div>
@@ -116,7 +159,7 @@ export default function SubmissionReport() {
       {noReportYet && submission.status === "embedded" && (
         <EmptyState
           title="No report generated yet"
-          description="Run a check to get originality, internal-match, internet-match, and AI-detection scores."
+          description="Run a check to get originality, internal-match, internet-match, and AI writing signal analysis."
           action={
             <button className="btn-primary" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
               {generateMutation.isPending ? "Generating…" : "Generate report"}
@@ -132,19 +175,40 @@ export default function SubmissionReport() {
               <ScoreSeal label="Originality" value={report.overall_originality_score} size={110} />
               <ScoreSeal label="Internal match" value={report.internal_score} invert size={90} />
               <ScoreSeal label="Internet match" value={report.internet_score} invert size={90} />
-              <ScoreSeal label="AI likelihood" value={report.ai_score} invert size={90} />
+              <ScoreSeal
+                label={aiDisplaySeal.label}
+                value={aiDisplaySeal.value}
+                textValue={aiDisplaySeal.textValue}
+                status={aiDisplaySeal.status}
+                invert={aiDisplaySeal.invert}
+                size={90}
+              />
             </div>
-            <p className="text-xs text-slate-light font-mono text-center mt-4">
-              generated {report.generated_at ? new Date(report.generated_at).toLocaleString() : "—"} ·
-              {" "}{report.paragraphs_checked ?? 0} paragraph(s) checked
-            </p>
+
+            <div className="text-xs text-slate-light font-mono text-center mt-4 space-y-1">
+              <p>
+                Generated {report.generated_at ? new Date(report.generated_at).toLocaleString() : "—"} ·{" "}
+                {report.paragraphs_checked ?? 0} paragraph(s) checked
+              </p>
+              {report.ai_word_coverage_pct !== null && report.ai_word_coverage_pct !== undefined && (
+                <p>
+                  AI prose coverage: {report.ai_word_coverage_pct}% ({report.ai_evaluated_words || 0} eligible prose words evaluated)
+                </p>
+              )}
+            </div>
+
+            {aiStatus === "legacy" && (
+              <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded-sm text-xs text-amber-800 text-center">
+                * Note: This is a legacy AI score from an earlier version. Click &quot;Regenerate report&quot; above to re-evaluate with conservative prose windowing.
+              </div>
+            )}
           </section>
 
           <section className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <SummaryCard title="Legend">
               <LegendRow color="bg-rust/20 border-rust/40" label="Matches another submission (internal)" />
               <LegendRow color="bg-brass/20 border-brass/40" label="Matches an indexed source (internet)" />
-              <LegendRow color="bg-violet/20 border-violet/40" label="Likely AI-generated" />
+              <LegendRow color="bg-violet/20 border-violet/40" label="AI writing signal (review required)" />
             </SummaryCard>
             <SummaryCard title="Copied from">
               {report.copied_from?.length ? (
@@ -197,35 +261,29 @@ export default function SubmissionReport() {
                 </Link>
               </div>
               <p className="text-xs text-slate-light mt-2">
-                Tip: submission IDs are visible in an assignment's submission list, where you can also select two rows to compare directly.
+                Tip: submission IDs are visible in an assignment&apos;s submission list, where you can also select two rows to compare directly.
               </p>
             </section>
           )}
 
-          <section className="card">
-            <h2 className="font-display text-lg mb-4">Full text with highlights</h2>
-            <div className="space-y-3">
-              {(submission.paragraphs || []).map((text, index) => {
-                const flags = highlightMap[index] || [];
-                return (
-                  <p
-                    key={index}
-                    className={`text-sm leading-relaxed p-3 rounded-sm border ${paragraphStyle(flags)}`}
-                  >
-                    {text}
-                  </p>
-                );
-              })}
-              {!submission.paragraphs?.length && <p className="text-sm text-slate-light">No paragraph text stored for this submission.</p>}
-            </div>
-          </section>
-
           <p className="text-xs text-slate-light max-w-2xl">
-            AI-detection note: this uses an open-source classifier trained primarily on older
-            (GPT-2-era) generated text. Treat the AI-likelihood score as a rough signal, not
-            proof — always review flagged paragraphs yourself before drawing conclusions.
+            AI writing signal note: this classifier provides a statistical pattern indicator, not definitive proof of authorship.
+            Borderline or short passages require human academic judgment. Originality and plagiarism scores remain completely separate.
           </p>
         </>
+      )}
+
+      {/* Real layout document viewer with interactive in-doc highlighting */}
+      {submission && (
+        <DocumentViewer
+          submissionId={id}
+          originalFilename={submission.original_filename}
+          report={report}
+          paragraphs={submission.paragraphs || []}
+          highlightMap={highlightMap}
+          isFaculty={isFaculty}
+          paragraphStyle={paragraphStyle}
+        />
       )}
 
       {report && report.status === "failed" && <ErrorBanner message={report.error || "Report generation failed."} />}
@@ -244,7 +302,8 @@ function buildHighlightMap(report) {
   (report.internal_matches || []).forEach((m) => add(m.source_paragraph_index, "internal"));
   (report.internet_matches || []).forEach((m) => add(m.source_paragraph_index, "internet"));
   (report.ai_results || []).forEach((r) => {
-    if (r.label === "likely_ai") add(r.paragraph_index, "ai");
+    const label = typeof r.label === "string" ? r.label : r.label?.value;
+    if (label === "likely_ai") add(r.paragraph_index, "ai");
   });
   return map;
 }

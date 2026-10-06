@@ -98,10 +98,11 @@ def test_student_dashboard_reflects_activity(client):
 
 def test_comparison_requires_both_reports_generated(client):
     faculty = register_and_login(client, "faculty", "cmp_fac@example.com")
-    student = register_and_login(client, "student", "cmp_stu@example.com")
+    student1 = register_and_login(client, "student", "cmp_stu1@example.com")
+    student2 = register_and_login(client, "student", "cmp_stu2@example.com")
     assignment = _create_assignment(client, faculty["headers"])
-    sub_a = _upload(client, student["headers"], assignment["id"], ["Paragraph one about tectonic plates."], "a.docx")
-    sub_b = _upload(client, student["headers"], assignment["id"], ["Paragraph one about tectonic plates."], "b.docx")
+    sub_a = _upload(client, student1["headers"], assignment["id"], ["Paragraph one about tectonic plates."], "a.docx")
+    sub_b = _upload(client, student2["headers"], assignment["id"], ["Paragraph one about tectonic plates."], "b.docx")
 
     # Neither has a report yet -> comparison should fail with a clear error, not a 500.
     resp = client.get(
@@ -109,8 +110,8 @@ def test_comparison_requires_both_reports_generated(client):
     )
     assert resp.status_code == 409
 
-    client.post(f"/api/submissions/{sub_a['id']}/generate-report", headers=student["headers"])
-    client.post(f"/api/submissions/{sub_b['id']}/generate-report", headers=student["headers"])
+    client.post(f"/api/submissions/{sub_a['id']}/generate-report", headers=student1["headers"])
+    client.post(f"/api/submissions/{sub_b['id']}/generate-report", headers=student2["headers"])
 
     resp = client.get(
         f"/api/submissions/{sub_a['id']}/compare/{sub_b['id']}", headers=faculty["headers"]
@@ -122,10 +123,11 @@ def test_comparison_requires_both_reports_generated(client):
 
 def test_student_cannot_use_comparison_endpoint(client):
     faculty = register_and_login(client, "faculty", "cmp2_fac@example.com")
-    student = register_and_login(client, "student", "cmp2_stu@example.com")
+    student1 = register_and_login(client, "student", "cmp2_stu1@example.com")
+    student2 = register_and_login(client, "student", "cmp2_stu2@example.com")
     assignment = _create_assignment(client, faculty["headers"])
-    sub_a = _upload(client, student["headers"], assignment["id"], ["Text A"], "a.docx")
-    sub_b = _upload(client, student["headers"], assignment["id"], ["Text B"], "b.docx")
+    sub_a = _upload(client, student1["headers"], assignment["id"], ["Text A"], "a.docx")
+    sub_b = _upload(client, student2["headers"], assignment["id"], ["Text B"], "b.docx")
 
-    resp = client.get(f"/api/submissions/{sub_a['id']}/compare/{sub_b['id']}", headers=student["headers"])
+    resp = client.get(f"/api/submissions/{sub_a['id']}/compare/{sub_b['id']}", headers=student1["headers"])
     assert resp.status_code == 403
